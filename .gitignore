@@ -1,0 +1,39 @@
+# Rust
+target/
+Cargo.lock
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Build artifacts
+*.apk
+*.aab
+*.msi
+*.exe
+*.AppImage
+*.deb
+*.dmg
+
+# Temporary build directories
+src-tauri/target/
+temp-build/
+
+# GitHub Pages
+docs/
+
+# Build system
+build-output/
+*.zip
