@@ -1,0 +1,670 @@
+You are working inside a completely EMPTY GitHub repository.
+
+Build this repository from scratch into a reusable multi-platform build system for my Web OS.
+
+IMPORTANT:
+- The repository is currently empty.
+- Create everything required from scratch.
+- Do not assume an existing Tauri project.
+- Use Tauri v2.
+- My Web OS is a large HTML/CSS/JavaScript application.
+- I will provide my Web OS as a ZIP archive through a web dashboard.
+- The goal is NOT simply to wrap a website in an APK.
+- The native application must provide a controlled sandbox/runtime layer so that my Web OS can have native capabilities such as a virtual filesystem, terminal, process execution, networking, etc.
+- Keep the Web OS frontend platform-independent as much as possible.
+
+==================================================
+1. OVERALL ARCHITECTURE
+==================================================
+
+Create this architecture:
+
+Web OS UI
+    ↓
+Common Web OS JavaScript API
+    ↓
+Tauri v2 bridge
+    ↓
+Platform-specific native implementation
+    ↓
+Sandboxed runtime
+
+The frontend must NOT directly depend on Android, Windows, Linux, or macOS APIs.
+
+Instead expose a common API such as:
+
+window.webOS.fs
+window.webOS.terminal
+window.webOS.process
+window.webOS.network
+window.webOS.storage
+window.webOS.device
+window.webOS.permissions
+
+The exact API design can be improved if necessary.
+
+==================================================
+2. WEB OS AS A ZIP
+==================================================
+
+I will have a large existing Web OS project.
+
+I want to upload its ZIP through a GitHub Pages web dashboard.
+
+The dashboard should:
+
+- accept a ZIP file
+- allow me to specify application name
+- allow me to specify version
+- allow me to choose target platforms
+- initiate a GitHub Actions build
+- show build status
+- provide download links when builds finish
+
+Do NOT assume the Web OS source is small.
+
+Do NOT require me to manually copy the Web OS files into a Tauri project.
+
+The build system should take the uploaded project and inject it into the reusable Tauri shell during CI.
+
+==================================================
+3. GITHUB PAGES DASHBOARD
+==================================================
+
+Create a static GitHub Pages dashboard.
+
+The dashboard is only the frontend.
+
+It must NOT contain GitHub tokens or private credentials.
+
+The dashboard should have:
+
+- ZIP upload
+- app name
+- package ID
+- version
+- platform selection
+- build button
+- build status
+- artifact download links
+
+The dashboard should communicate with GitHub using a secure architecture.
+
+Do NOT expose a GitHub Personal Access Token in client-side JavaScript.
+
+If a GitHub App, repository_dispatch, workflow_dispatch, or another secure mechanism is required, implement the safest practical architecture and document the required configuration.
+
+==================================================
+4. BUILD SYSTEM
+==================================================
+
+Create reusable Tauri v2 build infrastructure.
+
+Do NOT create a separate permanent Tauri project for every Web OS build.
+
+Use one reusable Tauri shell/template.
+
+During GitHub Actions:
+
+1. Receive/select a Web OS project.
+2. Extract the ZIP.
+3. Validate the project.
+4. Create a temporary Tauri v2 application.
+5. Copy the Web OS frontend into the Tauri frontend directory.
+6. Configure metadata.
+7. Configure icons.
+8. Configure required Tauri permissions/capabilities.
+9. Build the requested platform.
+10. Upload the resulting artifacts.
+
+The permanent repository should remain a reusable factory.
+
+==================================================
+5. TARGET PLATFORMS
+==================================================
+
+Support, where realistically possible with Tauri v2:
+
+ANDROID:
+- APK
+- AAB
+
+WINDOWS:
+- standard Tauri Windows bundles
+
+LINUX:
+- AppImage
+- Debian package if practical
+
+MACOS:
+- DMG / application bundle as appropriate
+
+Use GitHub-hosted runners correctly.
+
+Do NOT fake cross-compilation.
+
+Use:
+
+Ubuntu → Linux/Android where appropriate
+Windows → Windows
+macOS → macOS
+
+Use a matrix strategy where appropriate.
+
+==================================================
+6. SANDBOXED WEB OS RUNTIME
+==================================================
+
+This is NOT just a website wrapper.
+
+Design a native runtime layer for the Web OS.
+
+The runtime should conceptually provide:
+
+Filesystem:
+    webOS.fs
+
+Terminal:
+    webOS.terminal
+
+Process management:
+    webOS.process
+
+Network:
+    webOS.network
+
+Storage:
+    webOS.storage
+
+Permissions:
+    webOS.permissions
+
+Device/native functionality:
+    webOS.device
+
+The Web OS frontend should communicate with these through a controlled Tauri bridge.
+
+Do NOT expose unrestricted native commands directly to arbitrary frontend JavaScript.
+
+==================================================
+7. FILESYSTEM
+==================================================
+
+Create a sandboxed virtual filesystem.
+
+The Web OS should have its own filesystem namespace.
+
+For example:
+
+/home/
+/home/user/
+/home/user/Documents/
+/home/user/Downloads/
+/tmp/
+/apps/
+
+The Web OS must NOT automatically receive unrestricted access to the host operating system filesystem.
+
+Create an abstraction such as:
+
+webOS.fs.readFile()
+webOS.fs.writeFile()
+webOS.fs.readdir()
+webOS.fs.mkdir()
+webOS.fs.remove()
+
+Use Tauri's filesystem capabilities where appropriate, but enforce the application's sandbox boundary.
+
+==================================================
+8. TERMINAL
+==================================================
+
+Design a terminal API:
+
+webOS.terminal.exec(command)
+webOS.terminal.spawn(command, args)
+webOS.terminal.write(...)
+webOS.terminal.resize(...)
+webOS.terminal.kill(...)
+
+The terminal must run inside the application's controlled sandbox.
+
+Do NOT expose an unrestricted host shell by default.
+
+The implementation should be platform-aware.
+
+IMPORTANT:
+
+Android is NOT equivalent to desktop Linux.
+
+Do not assume that Android APKs can simply execute arbitrary Linux commands.
+
+For Android, design the runtime so that a Linux-like terminal can be implemented using an isolated userspace/runtime if required.
+
+For desktop platforms, use the safest practical sandbox/process mechanism.
+
+If a full Linux userspace is too large to implement in this initial repository, create a clean runtime abstraction and a working minimal sandbox implementation that can later be extended.
+
+==================================================
+9. PROCESS API
+==================================================
+
+Provide an abstraction similar to:
+
+webOS.process.spawn()
+webOS.process.list()
+webOS.process.kill()
+
+Processes must respect sandbox/security boundaries.
+
+Do not allow arbitrary host-level privileges.
+
+==================================================
+10. NETWORK API
+==================================================
+
+Provide a common API for network operations.
+
+The Web OS should be able to call normal HTTPS APIs.
+
+For example:
+
+webOS.network.fetch(url, options)
+
+or allow normal browser fetch where safe.
+
+Do NOT create separate application-level APIs for every platform.
+
+The frontend API should remain common.
+
+Platform-specific implementation belongs underneath the abstraction.
+
+==================================================
+11. PERMISSION SYSTEM
+==================================================
+
+Create a permission model.
+
+Potential permissions:
+
+filesystem
+terminal
+process
+network
+clipboard
+notifications
+device
+camera
+microphone
+etc.
+
+The Web OS should be able to query permissions.
+
+Example:
+
+webOS.permissions.request("filesystem")
+
+Do not automatically grant dangerous capabilities.
+
+Keep the design extensible.
+
+==================================================
+12. PLATFORM ADAPTERS
+==================================================
+
+Keep platform-specific functionality behind adapters.
+
+Conceptually:
+
+runtime/
+    common/
+    android/
+    windows/
+    linux/
+    macos/
+
+The Web OS JavaScript API must remain stable.
+
+Example:
+
+webOS.fs.readFile()
+
+must have platform-specific implementations underneath without changing the frontend code.
+
+==================================================
+13. ANDROID
+==================================================
+
+Android requires special treatment.
+
+Do not assume desktop process APIs work on Android.
+
+Design the Android runtime around Android's application sandbox.
+
+If a real shell/Linux userspace is required, isolate it inside the application and do not give it unrestricted access to Android.
+
+Document exactly what is supported.
+
+The first version should prioritize a secure and functional architecture over pretending to provide a full Linux distribution.
+
+==================================================
+14. DESKTOP
+==================================================
+
+For Windows, Linux, and macOS:
+
+- provide the Web OS runtime
+- provide sandboxed filesystem access
+- provide controlled process/terminal access
+- provide networking
+- use Tauri v2 commands/plugins where appropriate
+
+Do not expose arbitrary Rust commands without validation.
+
+==================================================
+15. SECURITY
+==================================================
+
+Security is extremely important.
+
+Assume the Web OS can execute JavaScript downloaded from its own project.
+
+Therefore:
+
+- never expose arbitrary Rust command execution
+- validate all command arguments
+- enforce filesystem boundaries
+- prevent path traversal
+- restrict process execution
+- enforce permissions
+- do not expose secrets to the WebView
+- do not expose GitHub credentials to the WebView
+- do not store signing keys in the repository
+- use GitHub Secrets for sensitive credentials
+
+Implement safe defaults.
+
+==================================================
+16. GITHUB ACTIONS
+==================================================
+
+Create workflows for:
+
+- manual builds
+- optional automatic builds
+- GitHub Pages deployment
+
+Manual build inputs should include:
+
+app name
+version
+platform
+package ID
+
+Support:
+
+all
+android
+windows
+linux
+macos
+
+where appropriate.
+
+The workflow should produce clearly named artifacts.
+
+Examples:
+
+WebOS-1.0.0-android.apk
+WebOS-1.0.0-android.aab
+WebOS-1.0.0-windows.msi
+WebOS-1.0.0-linux.AppImage
+WebOS-1.0.0-macos.dmg
+
+Use actual filenames produced by Tauri where necessary.
+
+==================================================
+17. BUILD ARTIFACT STORAGE
+==================================================
+
+Upload native builds as GitHub Actions artifacts.
+
+Optionally support GitHub Releases.
+
+Do not permanently store huge source ZIP files in Git history unless necessary.
+
+If the project is very large, design the upload/build flow so the ZIP can be transferred to the build process without unnecessarily bloating Git history.
+
+==================================================
+18. GITHUB API / BUILD CONTROL
+==================================================
+
+The GitHub Pages dashboard must never contain a raw personal access token.
+
+Design a secure mechanism for:
+
+upload
+build trigger
+status checking
+artifact retrieval
+
+If GitHub's normal browser APIs cannot safely perform a required operation without exposing credentials, introduce the minimum required backend/proxy mechanism or use GitHub Actions appropriately.
+
+Explain the security tradeoffs.
+
+==================================================
+19. LARGE PROJECT SUPPORT
+==================================================
+
+My Web OS may be very large.
+
+Therefore:
+
+- avoid unnecessary copying
+- avoid unnecessary npm installs
+- do not require a framework
+- preserve arbitrary project files
+- support nested directories
+- support images
+- support fonts
+- support JSON
+- support WASM
+- support audio/video
+- support JavaScript modules
+- preserve relative paths
+
+The build process should handle large projects as efficiently as reasonably possible.
+
+==================================================
+20. ICONS AND METADATA
+==================================================
+
+Support optional:
+
+icon.png
+
+and:
+
+app.json
+
+Example:
+
+{
+  "name": "My Web OS",
+  "packageId": "com.example.webos",
+  "version": "1.0.0",
+  "description": "My Web Operating System"
+}
+
+Automatically generate reasonable defaults when fields are missing.
+
+==================================================
+21. WEB VERSION
+==================================================
+
+The same Web OS frontend must be able to run in a normal browser.
+
+When running in browser:
+
+- use browser-compatible APIs where possible
+- provide graceful fallbacks for native APIs
+- do not crash if Tauri is unavailable
+
+When running inside Tauri:
+
+- expose the native runtime APIs.
+
+For example:
+
+if native runtime exists:
+    use webOS.fs
+
+otherwise:
+    use browser/local fallback
+
+==================================================
+22. DEVELOPER EXPERIENCE
+==================================================
+
+Make the repository easy to understand.
+
+Create:
+
+README.md
+ARCHITECTURE.md
+SECURITY.md
+
+README.md should explain the simple workflow.
+
+ARCHITECTURE.md should explain:
+
+Web OS frontend
+↓
+Common API
+↓
+Tauri bridge
+↓
+Platform adapters
+↓
+Sandbox/runtime
+
+SECURITY.md should explain the threat model and permission boundaries.
+
+==================================================
+23. EXAMPLE WEB OS
+==================================================
+
+Include a tiny example application only for testing the infrastructure.
+
+It should demonstrate:
+
+- filesystem API
+- terminal API
+- process API
+- permissions
+- platform detection
+
+Do not make this example application the actual Web OS.
+
+==================================================
+24. TESTING
+==================================================
+
+Add tests/checks for:
+
+- app.json parsing
+- package ID validation
+- ZIP extraction
+- path traversal prevention
+- filesystem sandbox boundaries
+- build configuration
+- platform detection
+- GitHub Actions configuration
+
+==================================================
+25. IMPORTANT: DO NOT OVERENGINEER THE FIRST VERSION
+==================================================
+
+Build a working foundation first.
+
+Do not attempt to implement an entire operating system kernel.
+
+The Web OS UI already exists separately.
+
+This repository is primarily:
+
+1. Tauri v2 native shell
+2. common Web OS native API
+3. sandbox/runtime abstraction
+4. GitHub Actions multi-platform build factory
+5. GitHub Pages build dashboard
+
+Keep the architecture modular so the runtime can become more powerful later.
+
+==================================================
+26. FINAL VALIDATION
+==================================================
+
+After implementation:
+
+- inspect all files
+- verify Tauri v2 configuration
+- verify Cargo configuration
+- verify GitHub Actions YAML
+- verify Pages workflow
+- verify dashboard
+- verify ZIP handling
+- verify security boundaries
+- verify package ID generation
+- verify artifact paths
+- check for deprecated Tauri v1 APIs
+- check for hardcoded app names
+- check for hardcoded credentials
+- check for exposed GitHub tokens
+- fix obvious problems
+
+If something cannot actually work on a particular platform, do NOT fake it.
+
+Clearly document the limitation and provide the correct abstraction for implementing it later.
+
+==================================================
+FINAL OUTPUT
+==================================================
+
+When finished, provide:
+
+1. Complete repository tree.
+2. Explanation of every major component.
+3. Exact ZIP upload workflow.
+4. Exact GitHub Actions workflow.
+5. How the Tauri v2 shell works.
+6. How the Web OS native API works.
+7. How filesystem sandboxing works.
+8. How terminal/process execution works.
+9. Android limitations.
+10. Windows/Linux/macOS implementation details.
+11. GitHub Pages architecture.
+12. Required GitHub configuration.
+13. Required GitHub Secrets, if any.
+14. Security limitations.
+15. Exact instructions for taking my existing Web OS ZIP and producing native builds.
+
+The final user experience should be:
+
+    My Web OS ZIP
+          ↓
+    GitHub Pages dashboard
+          ↓
+    Select platforms
+          ↓
+    Build
+          ↓
+    GitHub Actions
+          ↓
+    Tauri v2
+          ↓
+    Sandboxed native Web OS
+          ↓
+    APK / AAB / Windows / Linux / macOS
+
+Do not ask me to manually create separate Tauri projects for each platform or each Web OS version.
