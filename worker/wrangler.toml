@@ -1,0 +1,27 @@
+name = "htmltoapp-build-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-04"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUILDS"
+bucket_name = "htmltoapp-build-uploads"
+
+[[ratelimits]]
+name = "UPLOAD_LIMITER"
+namespace_id = "4207"
+simple = { limit = 5, period = 60 }
+
+[vars]
+GITHUB_OWNER = "tingart"
+GITHUB_REPO = "htmltoapp"
+DEFAULT_BRANCH = "main"
+WORKFLOW_ID = "build.yml"
+WORKFLOW_PATH = ".github/workflows/build.yml"
+PAGES_URL = "https://tingart.github.io/htmltoapp/"
+ALLOWED_ORIGINS = "https://tingart.github.io"
+MAX_UPLOAD_BYTES = "83886080"
+CLOUDFLARE_BODY_LIMIT_BYTES = "104857600"
+
+[triggers]
+crons = ["0 * * * *"]

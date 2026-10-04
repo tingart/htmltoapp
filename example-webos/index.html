@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e1714">
+  <title>Web OS API Sample</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="sample-shell">
+    <header class="sample-header">
+      <span class="sample-mark">F</span>
+      <span>WEB OS <b>RUNTIME SAMPLE</b></span>
+      <span class="native-indicator"><i></i><span id="platform-label">Checking runtime…</span></span>
+    </header>
+    <section class="sample-intro">
+      <p class="sample-eyebrow">TAURI V2 · SHARED JAVASCRIPT API</p>
+      <h1>Your app.<br><span>Native powers.</span></h1>
+      <p class="sample-lede">A small smoke-test project for the filesystem, permission prompts, terminal and process abstraction.</p>
+    </section>
+    <section class="sample-grid">
+      <article class="sample-card">
+        <div class="card-heading"><span class="card-number">01</span><span>Sandboxed files</span></div>
+        <p>Request a grant, save a note to the virtual Documents folder, then read it back.</p>
+        <button id="filesystem-button" type="button">Write & read a note <span>↗</span></button>
+        <pre id="filesystem-output">Waiting for permission…</pre>
+      </article>
+      <article class="sample-card">
+        <div class="card-heading"><span class="card-number">02</span><span>Safe terminal</span></div>
+        <p>The starter terminal runs built-ins only. It never opens a host shell.</p>
+        <button id="terminal-button" type="button">Run “help” <span>↗</span></button>
+        <pre id="terminal-output">Waiting for permission…</pre>
+      </article>
+      <article class="sample-card">
+        <div class="card-heading"><span class="card-number">03</span><span>App tasks</span></div>
+        <p>Spawn and list a short-lived built-in task; no OS process is launched.</p>
+        <button id="process-button" type="button">Spawn “pwd” task <span>↗</span></button>
+        <pre id="process-output">Waiting for permission…</pre>
+      </article>
+    </section>
+    <footer class="sample-footer"><span>Runs in a normal browser with limited fallbacks.</span><span>Native access is scoped · default deny</span></footer>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

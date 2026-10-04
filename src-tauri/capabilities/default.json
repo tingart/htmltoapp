@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Smallest useful capability set for the bundled Web OS window.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
