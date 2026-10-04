@@ -248,6 +248,19 @@ function closeDialog(dialog) {
   else dialog.removeAttribute('open');
 }
 
+function isCancelSubmit(event) {
+  // method="dialog" forms fire submit for every button (Cancel, ×, Create).
+  // Cancel/close buttons carry value="cancel" so handlers can let them close
+  // the dialog instead of running the primary action.
+  return Boolean(event.submitter && event.submitter.value === 'cancel');
+}
+
+function setMobileSidebar(open) {
+  $('project-sidebar').classList.toggle('mobile-open', open);
+  $('sidebar-backdrop').hidden = !open;
+  $('mobile-menu-button').setAttribute('aria-expanded', String(open));
+}
+
 function confirmAction({ title, message, confirmLabel = 'Delete' }) {
   const dialog = $('confirm-dialog');
   // window.confirm is silently blocked (always returns false) inside embedded
@@ -484,8 +497,7 @@ async function loadProject(id) {
   state.currentPath = '';
   state.currentRecord = null;
   localStorage.setItem(ACTIVE_PROJECT_KEY, project.id);
-  $('project-sidebar').classList.remove('mobile-open');
-  $('mobile-menu-button').setAttribute('aria-expanded', 'false');
+  setMobileSidebar(false);
   setActiveProjectUI();
   renderFileTree();
   const preferred = project.filePaths.includes('index.html') ? 'index.html' : project.filePaths[0];
@@ -1120,10 +1132,10 @@ function setInputFromRecord(project) {
 
 function bindEvents() {
   $('top-create-project').addEventListener('click', () => openDialog($('project-dialog')));
-  $('sidebar-new-project').addEventListener('click', () => openDialog($('project-dialog')));
+  $('sidebar-new-project').addEventListener('click', () => { setMobileSidebar(false); openDialog($('project-dialog')); });
   $('welcome-create-project').addEventListener('click', () => openDialog($('project-dialog')));
   $('welcome-import-zip').addEventListener('click', () => $('zip-input').click());
-  $('import-zip-button').addEventListener('click', () => $('zip-input').click());
+  $('import-zip-button').addEventListener('click', () => { setMobileSidebar(false); $('zip-input').click(); });
   $('zip-input').addEventListener('change', (event) => { const file = event.target.files?.[0]; if (file) void importZip(file); });
   $('upload-files-button').addEventListener('click', () => $('files-input').click());
   $('files-input').addEventListener('change', (event) => {
@@ -1172,18 +1184,26 @@ function bindEvents() {
   for (const checkbox of document.querySelectorAll('input[name="platform"]')) checkbox.addEventListener('change', updateBuildControls);
   $('build-button').addEventListener('click', () => void startBuild());
   $('mobile-menu-button').addEventListener('click', () => {
-    const sidebar = $('project-sidebar');
-    sidebar.classList.toggle('mobile-open');
-    $('mobile-menu-button').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open')));
+    setMobileSidebar(!$('project-sidebar').classList.contains('mobile-open'));
   });
+  $('mobile-menu-close').addEventListener('click', () => setMobileSidebar(false));
+  $('sidebar-backdrop').addEventListener('click', () => setMobileSidebar(false));
+  $('mobile-export-button').addEventListener('click', () => {
+    if (!state.project) { showToast('Create or open a project first, then export it.', 'error'); return; }
+    setMobileSidebar(false);
+    void exportProject();
+  });
+  $('mobile-help-button').addEventListener('click', () => { setMobileSidebar(false); openDialog($('help-dialog')); });
   $('help-button').addEventListener('click', () => openDialog($('help-dialog')));
   $('relay-settings-button').addEventListener('click', () => {
     $('relay-url-input').value = state.relayUrl;
     $('disconnect-relay-button').hidden = !state.relayUrl;
+    setMobileSidebar(false);
     openDialog($('relay-dialog'));
   });
   $('relay-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    if (isCancelSubmit(event)) { closeDialog($('relay-dialog')); return; }
     const value = $('relay-url-input').value.trim();
     try {
       state.relayUrl = value ? normalizeRelayUrl(value) : '';
@@ -1206,6 +1226,7 @@ function bindEvents() {
   });
   $('project-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    if (isCancelSubmit(event)) { closeDialog($('project-dialog')); return; }
     const name = $('new-project-name').value.trim();
     if (!name) return;
     closeDialog($('project-dialog'));
@@ -1213,6 +1234,7 @@ function bindEvents() {
   });
   $('file-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (isCancelSubmit(event)) { closeDialog($('file-dialog')); $('new-file-path').value = ''; return; }
     if (!state.project) return;
     try {
       const path = safeProjectPath($('new-file-path').value);
