@@ -1,0 +1,264 @@
+name: Build native app
+run-name: "Forge build · ${{ inputs.upload_id || github.run_id }} · ${{ inputs.app_name || 'Web OS' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_id:
+        description: Temporary R2 upload reference (normally set by the secure dashboard relay)
+        required: false
+        type: string
+      source_url:
+        description: Public HTTPS URL to a project ZIP (manual maintainer fallback)
+        required: false
+        type: string
+      source_path:
+        description: Repository-relative path to a project ZIP, e.g. projects/my-webos.zip
+        required: false
+        type: string
+      app_name:
+        description: App display name (leave blank to use app.json)
+        required: false
+        type: string
+      package_id:
+        description: Reverse-domain app ID (leave blank to use app.json)
+        required: false
+        type: string
+      version:
+        description: Semantic version (leave blank to use app.json)
+        required: false
+        type: string
+      platforms:
+        description: "Comma-separated targets: android, windows, linux, macos, or all"
+        required: true
+        default: android,windows,linux,macos
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: native-build-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Validate build targets
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build platform matrix
+        id: targets
+        env:
+          REQUESTED_PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          MATRIX="$(python3 build-system/scripts/platform_matrix.py "$REQUESTED_PLATFORMS")"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    timeout-minutes: 90
+    steps:
+      - name: Check out build factory
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install build-factory tools
+        run: npm ci
+        shell: bash
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build output
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Linux Tauri dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential curl file libayatana-appindicator3-dev libssl-dev \
+            libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev patchelf
+        shell: bash
+
+      - name: Set up Java for Android
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK and NDK
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018"
+
+      - name: Set Android native build paths
+        if: matrix.platform == 'android'
+        run: |
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          rustup target add aarch64-linux-android
+        shell: bash
+
+      - name: Fetch project ZIP
+        env:
+          UPLOAD_ID: ${{ inputs.upload_id }}
+          SOURCE_URL: ${{ inputs.source_url }}
+          SOURCE_PATH: ${{ inputs.source_path }}
+          RELAY_URL: ${{ vars.UPLOAD_RELAY_URL }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p build-input
+          count=0
+          [[ -n "$UPLOAD_ID" ]] && count=$((count + 1))
+          [[ -n "$SOURCE_URL" ]] && count=$((count + 1))
+          [[ -n "$SOURCE_PATH" ]] && count=$((count + 1))
+          if [[ "$count" -ne 1 ]]; then
+            echo "Choose exactly one source: the dashboard upload, a public HTTPS ZIP URL, or a ZIP path in this repository." >&2
+            exit 2
+          fi
+
+          if [[ -n "$UPLOAD_ID" ]]; then
+            if [[ ! "$UPLOAD_ID" =~ ^[0-9a-f-]{36}$ ]]; then
+              echo "The relay upload reference is malformed." >&2
+              exit 2
+            fi
+            if [[ -z "$RELAY_URL" || "$RELAY_URL" != https://* ]]; then
+              echo "Set the repository Actions variable UPLOAD_RELAY_URL to the HTTPS Cloudflare Worker URL." >&2
+              exit 2
+            fi
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+              --max-redirs 5 --max-filesize 1073741824 \
+              --header "Authorization: Bearer $SOURCE_GITHUB_TOKEN" \
+              --header "X-GitHub-Run-Id: $GITHUB_RUN_ID" \
+              "${RELAY_URL%/}/v1/source/$UPLOAD_ID" \
+              --output build-input/project.zip
+          elif [[ -n "$SOURCE_URL" ]]; then
+            python3 build-system/scripts/validate_source_url.py "$SOURCE_URL" > /dev/null
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+              --max-redirs 5 --max-filesize 1073741824 \
+              "$SOURCE_URL" --output build-input/project.zip
+          else
+            python3 build-system/scripts/copy_source_path.py "$SOURCE_PATH" build-input/project.zip
+          fi
+          test -s build-input/project.zip
+        shell: bash
+
+      - name: Safely extract, validate and inject the Web OS runtime
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+          PACKAGE_ID: ${{ inputs.package_id }}
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          args=(
+            --archive build-input/project.zip
+            --destination app
+            --runtime-api src-tauri/frontend/webos-api.js
+          )
+          [[ -n "$APP_NAME" ]] && args+=(--name "$APP_NAME")
+          [[ -n "$PACKAGE_ID" ]] && args+=(--package-id "$PACKAGE_ID")
+          [[ -n "$APP_VERSION" ]] && args+=(--version "$APP_VERSION")
+          python3 build-system/scripts/prepare_project.py "${args[@]}"
+          python3 build-system/scripts/configure_tauri.py \
+            --config src-tauri/tauri.conf.json \
+            --manifest app/app.json \
+            --platform "${{ matrix.platform }}"
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from pathlib import Path
+          app = json.loads(Path('app/app.json').read_text(encoding='utf-8'))
+          print('BUILD_APP_NAME=' + app['name'])
+          print('BUILD_APP_VERSION=' + app['version'])
+          PY
+        shell: bash
+
+      - name: Generate Tauri platform icons
+        run: |
+          set -euo pipefail
+          icon="src-tauri/icons/icon.svg"
+          if [[ -f app/icon.png ]]; then
+            python3 build-system/scripts/validate_icon.py app/icon.png
+            icon="app/icon.png"
+          fi
+          npm run tauri -- icon "$icon" --output src-tauri/icons
+        shell: bash
+
+      - name: Initialize Android project
+        if: matrix.platform == 'android'
+        run: npm run tauri -- android init --ci
+        shell: bash
+
+      - name: Configure optional Android signing
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: python3 build-system/scripts/configure_android_signing.py
+        shell: bash
+
+      - name: Build Android APK and AAB
+        if: matrix.platform == 'android'
+        run: npm run tauri -- android build --apk --aab --target aarch64
+        shell: bash
+
+      - name: Build desktop bundle
+        if: matrix.platform != 'android'
+        run: npm run tauri -- build
+        shell: bash
+
+      - name: Collect bundles and SHA-256 checksums
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          APP_NAME="$BUILD_APP_NAME"
+          APP_VERSION="$BUILD_APP_VERSION"
+          if [[ "$PLATFORM" == "android" ]]; then
+            search_root="src-tauri/gen/android/app/build/outputs"
+          else
+            search_root="src-tauri/target/release/bundle"
+          fi
+          python3 build-system/scripts/collect_artifacts.py \
+            --platform "$PLATFORM" \
+            --name "$APP_NAME" \
+            --version "$APP_VERSION" \
+            --search-root "$search_root" \
+            --output build-artifacts
+        shell: bash
+
+      - name: Upload native artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.platform }}-${{ github.run_id }}
+          path: build-artifacts/
+          if-no-files-found: error
+          retention-days: 14

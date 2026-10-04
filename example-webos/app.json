@@ -1,0 +1,6 @@
+{
+  "name": "Web OS API Sample",
+  "packageId": "com.example.webos.sample",
+  "version": "1.0.0",
+  "description": "A tiny test project demonstrating the common window.webOS API."
+}
