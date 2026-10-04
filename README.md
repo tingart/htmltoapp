@@ -4,6 +4,12 @@ Forge is a local-first project workspace and a reusable **Tauri v2 build factory
 
 This repository is the factory — your Web OS source ZIP is uploaded to temporary storage for a build and is **not committed to Git**.
 
+## Live demo
+
+**[https://tingart.github.io/htmltoapp/](https://tingart.github.io/htmltoapp/)**
+
+The dashboard is deployed on GitHub Pages and runs entirely in your browser — create projects, upload your HTML files, edit code, and export ZIPs. No account or install needed; everything is saved locally on your device.
+
 ## What is implemented
 
 - A responsive, static project IDE in [`dashboard/`](dashboard/): multiple saved projects, nested file tree, lightweight editor, multi-file upload, ZIP import/export, and app metadata.

@@ -248,6 +248,40 @@ function closeDialog(dialog) {
   else dialog.removeAttribute('open');
 }
 
+function isCancelSubmit(event) {
+  // method="dialog" forms fire submit for every button (Cancel, ×, Create).
+  // Cancel/close buttons carry value="cancel" so handlers can let them close
+  // the dialog instead of running the primary action.
+  return Boolean(event.submitter && event.submitter.value === 'cancel');
+}
+
+function setMobileSidebar(open) {
+  $('project-sidebar').classList.toggle('mobile-open', open);
+  $('sidebar-backdrop').hidden = !open;
+  $('mobile-menu-button').setAttribute('aria-expanded', String(open));
+}
+
+function confirmAction({ title, message, confirmLabel = 'Delete' }) {
+  const dialog = $('confirm-dialog');
+  // window.confirm is silently blocked (always returns false) inside embedded
+  // previews and some mobile webviews, so destructive actions need an
+  // in-page confirmation dialog to stay reliable everywhere.
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+  }
+  return new Promise((resolve) => {
+    $('confirm-title').textContent = title;
+    $('confirm-message').textContent = message;
+    $('confirm-ok-button').textContent = confirmLabel;
+    const onClose = () => {
+      dialog.removeEventListener('close', onClose);
+      resolve(dialog.returnValue === 'confirm');
+    };
+    dialog.addEventListener('close', onClose);
+    openDialog(dialog);
+  });
+}
+
 function updateSaveBadge(kind) {
   const badge = $('save-status');
   badge.classList.toggle('saving', kind === 'saving');
@@ -463,8 +497,7 @@ async function loadProject(id) {
   state.currentPath = '';
   state.currentRecord = null;
   localStorage.setItem(ACTIVE_PROJECT_KEY, project.id);
-  $('project-sidebar').classList.remove('mobile-open');
-  $('mobile-menu-button').setAttribute('aria-expanded', 'false');
+  setMobileSidebar(false);
   setActiveProjectUI();
   renderFileTree();
   const preferred = project.filePaths.includes('index.html') ? 'index.html' : project.filePaths[0];
@@ -697,6 +730,11 @@ async function importZip(file) {
 }
 
 async function importFiles(fileList) {
+  // Snapshot the File objects synchronously: a FileList is bound to its input
+  // element and becomes empty as soon as that input is reset, which can happen
+  // before this async function resumes.
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
   if (!state.project) {
     openDialog($('project-dialog'));
     showToast('Create or import a project first, then add files.');
@@ -705,7 +743,6 @@ async function importFiles(fileList) {
   if (!(await flushEditorSave())) return;
   const added = [];
   try {
-    const files = [...fileList];
     const paths = validateProjectFilePaths(
       state.project.filePaths,
       files.map((file) => safeProjectPath(file.webkitRelativePath || file.name)),
@@ -776,7 +813,12 @@ async function exportProject() {
 
 async function deleteCurrentFile() {
   if (!state.project || !state.currentPath) return;
-  if (!window.confirm(`Delete “${state.currentPath}” from ${state.project.name}?`)) return;
+  const confirmed = await confirmAction({
+    title: 'Delete this file?',
+    message: `“${state.currentPath}” will be removed from ${state.project.name} on this device. This cannot be undone.`,
+    confirmLabel: 'Delete file',
+  });
+  if (!confirmed) return;
   const path = state.currentPath;
   await store.removeFile(state.project.id, path);
   state.project.filePaths = state.project.filePaths.filter((entry) => entry !== path);
@@ -793,7 +835,12 @@ async function deleteCurrentFile() {
 }
 
 async function deleteProject(project) {
-  if (!window.confirm(`Delete “${project.name}” and all of its files from this browser? This cannot be undone.`)) return;
+  const confirmed = await confirmAction({
+    title: 'Delete this project?',
+    message: `“${project.name}” and all of its files will be removed from this browser. This cannot be undone.`,
+    confirmLabel: 'Delete project',
+  });
+  if (!confirmed) return;
   if (state.project?.id === project.id) clearTimeout(state.metaTimer);
   if (localStorage.getItem(PENDING_BUILD_KEY) === project.id) localStorage.removeItem(PENDING_BUILD_KEY);
   await store.deleteProject(project.id);
@@ -1085,13 +1132,19 @@ function setInputFromRecord(project) {
 
 function bindEvents() {
   $('top-create-project').addEventListener('click', () => openDialog($('project-dialog')));
-  $('sidebar-new-project').addEventListener('click', () => openDialog($('project-dialog')));
+  $('sidebar-new-project').addEventListener('click', () => { setMobileSidebar(false); openDialog($('project-dialog')); });
   $('welcome-create-project').addEventListener('click', () => openDialog($('project-dialog')));
   $('welcome-import-zip').addEventListener('click', () => $('zip-input').click());
-  $('import-zip-button').addEventListener('click', () => $('zip-input').click());
+  $('import-zip-button').addEventListener('click', () => { setMobileSidebar(false); $('zip-input').click(); });
   $('zip-input').addEventListener('change', (event) => { const file = event.target.files?.[0]; if (file) void importZip(file); });
   $('upload-files-button').addEventListener('click', () => $('files-input').click());
-  $('files-input').addEventListener('change', (event) => { if (event.target.files?.length) void importFiles(event.target.files); event.target.value = ''; });
+  $('files-input').addEventListener('change', (event) => {
+    const files = Array.from(event.target.files || []);
+    // Reset the input only after snapshotting the File objects; clearing it
+    // empties the live FileList, which previously made uploads import nothing.
+    event.target.value = '';
+    if (files.length) void importFiles(files);
+  });
   $('project-list').addEventListener('click', (event) => {
     const item = event.target.closest('[data-project-id]');
     if (item) void loadProject(item.dataset.projectId);
@@ -1131,18 +1184,26 @@ function bindEvents() {
   for (const checkbox of document.querySelectorAll('input[name="platform"]')) checkbox.addEventListener('change', updateBuildControls);
   $('build-button').addEventListener('click', () => void startBuild());
   $('mobile-menu-button').addEventListener('click', () => {
-    const sidebar = $('project-sidebar');
-    sidebar.classList.toggle('mobile-open');
-    $('mobile-menu-button').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open')));
+    setMobileSidebar(!$('project-sidebar').classList.contains('mobile-open'));
   });
+  $('mobile-menu-close').addEventListener('click', () => setMobileSidebar(false));
+  $('sidebar-backdrop').addEventListener('click', () => setMobileSidebar(false));
+  $('mobile-export-button').addEventListener('click', () => {
+    if (!state.project) { showToast('Create or open a project first, then export it.', 'error'); return; }
+    setMobileSidebar(false);
+    void exportProject();
+  });
+  $('mobile-help-button').addEventListener('click', () => { setMobileSidebar(false); openDialog($('help-dialog')); });
   $('help-button').addEventListener('click', () => openDialog($('help-dialog')));
   $('relay-settings-button').addEventListener('click', () => {
     $('relay-url-input').value = state.relayUrl;
     $('disconnect-relay-button').hidden = !state.relayUrl;
+    setMobileSidebar(false);
     openDialog($('relay-dialog'));
   });
   $('relay-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    if (isCancelSubmit(event)) { closeDialog($('relay-dialog')); return; }
     const value = $('relay-url-input').value.trim();
     try {
       state.relayUrl = value ? normalizeRelayUrl(value) : '';
@@ -1165,6 +1226,7 @@ function bindEvents() {
   });
   $('project-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    if (isCancelSubmit(event)) { closeDialog($('project-dialog')); return; }
     const name = $('new-project-name').value.trim();
     if (!name) return;
     closeDialog($('project-dialog'));
@@ -1172,6 +1234,7 @@ function bindEvents() {
   });
   $('file-form').addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (isCancelSubmit(event)) { closeDialog($('file-dialog')); $('new-file-path').value = ''; return; }
     if (!state.project) return;
     try {
       const path = safeProjectPath($('new-file-path').value);
