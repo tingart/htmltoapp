@@ -189,6 +189,14 @@
     </form>
   </dialog>
 
+  <dialog class="modal" id="confirm-dialog">
+    <form method="dialog" class="modal-card">
+      <div class="modal-topline"><span class="modal-kicker modal-kicker-danger">PLEASE CONFIRM</span><button class="modal-close" value="cancel" aria-label="Close">×</button></div>
+      <div class="modal-title-row"><div class="modal-symbol modal-symbol-danger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15m-12.5 0 .8 13h9.4l.8-13M9.5 7V4.5h5V7m-6.2 3.2v6.6m3.7-6.6v6.6"/></svg></div><div><h2 id="confirm-title">Are you sure?</h2><p id="confirm-message"></p></div></div>
+      <div class="modal-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-danger" id="confirm-ok-button" value="confirm">Delete</button></div>
+    </form>
+  </dialog>
+
   <dialog class="modal" id="relay-dialog">
     <form method="dialog" class="modal-card modal-card-wide" id="relay-form">
       <div class="modal-topline"><span class="modal-kicker">SECURE BUILD CONNECTION</span><button class="modal-close" value="cancel" aria-label="Close">×</button></div>

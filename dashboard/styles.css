@@ -53,6 +53,10 @@ button:disabled { opacity: .5; cursor: not-allowed !important; }
 .button-top { min-height: 34px; padding: 0 13px; font-size: 10px; }
 .button-secondary { color: #d5ded4; background: #1b2520; border-color: #354239; }
 .button-secondary:hover:not(:disabled) { background: #242f28; border-color: #506152; }
+.button-danger { color: #26120e; background: var(--danger); box-shadow: 0 3px 14px rgba(250, 126, 114, .12); }
+.button-danger:hover:not(:disabled) { background: #ff958a; box-shadow: 0 6px 19px rgba(250, 126, 114, .2); }
+.modal-kicker-danger { color: #d98d83; }
+.modal-symbol-danger { border-color: rgba(250,126,114,.28); background: rgba(250,126,114,.1); color: #fa9c90; }
 .button-secondary svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .mobile-menu-button { display: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #17201c; cursor: pointer; }
 .mobile-menu-button svg { width: 18px; height: 18px; fill: none; stroke: #b5c0b5; stroke-width: 1.6; stroke-linecap: round; }
@@ -306,7 +310,7 @@ button:disabled { opacity: .5; cursor: not-allowed !important; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 1200px) {
-  .workspace-grid { grid-template-columns: 210px minmax(330px, 1fr) 272px; }
+  .workspace-grid { grid-template-columns: 210px minmax(0, 1fr) 272px; }
   .project-sidebar { padding-right: 11px; padding-left: 11px; }
   .build-sidebar { padding-right: 13px; padding-left: 13px; }
   .project-toolbar { padding-right: 13px; padding-left: 15px; }
@@ -380,6 +384,9 @@ button:disabled { opacity: .5; cursor: not-allowed !important; }
   .build-security { margin-top: 8px; }
   .bottom-bar { height: 31px; flex-basis: 31px; padding: 0 11px; font-size: 7px; }
   .bottom-bar > span { gap: 6px; }
+  /* iOS/Android auto-zoom on focus for any input under 16px; keep text
+     inputs readable and zoom-free on phones. */
+  .text-input, .mono-input, .modal-input { height: 40px; font-size: 16px; }
   .welcome-screen { min-height: 470px; }
   .welcome-content { padding-top: 38px; padding-bottom: 59px; }
 }
@@ -397,7 +404,6 @@ button:disabled { opacity: .5; cursor: not-allowed !important; }
   .file-sidebar-heading { height: 29px; flex-basis: 29px; padding-left: 11px; }
   .file-tree { display: flex; align-items: flex-start; gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 2px 8px 8px; white-space: nowrap; }
   .tree-folder, .tree-file { width: auto; min-width: 73px; min-height: 29px; justify-content: center; padding: 3px 7px; font-size: 8px; }
-  .tree-folder { display: none; }
   .tree-file { max-width: 130px; }
   .tree-file-label { max-width: 95px; }
   .file-sidebar-foot { display: none; }

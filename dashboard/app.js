@@ -248,6 +248,27 @@ function closeDialog(dialog) {
   else dialog.removeAttribute('open');
 }
 
+function confirmAction({ title, message, confirmLabel = 'Delete' }) {
+  const dialog = $('confirm-dialog');
+  // window.confirm is silently blocked (always returns false) inside embedded
+  // previews and some mobile webviews, so destructive actions need an
+  // in-page confirmation dialog to stay reliable everywhere.
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+  }
+  return new Promise((resolve) => {
+    $('confirm-title').textContent = title;
+    $('confirm-message').textContent = message;
+    $('confirm-ok-button').textContent = confirmLabel;
+    const onClose = () => {
+      dialog.removeEventListener('close', onClose);
+      resolve(dialog.returnValue === 'confirm');
+    };
+    dialog.addEventListener('close', onClose);
+    openDialog(dialog);
+  });
+}
+
 function updateSaveBadge(kind) {
   const badge = $('save-status');
   badge.classList.toggle('saving', kind === 'saving');
@@ -697,6 +718,11 @@ async function importZip(file) {
 }
 
 async function importFiles(fileList) {
+  // Snapshot the File objects synchronously: a FileList is bound to its input
+  // element and becomes empty as soon as that input is reset, which can happen
+  // before this async function resumes.
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
   if (!state.project) {
     openDialog($('project-dialog'));
     showToast('Create or import a project first, then add files.');
@@ -705,7 +731,6 @@ async function importFiles(fileList) {
   if (!(await flushEditorSave())) return;
   const added = [];
   try {
-    const files = [...fileList];
     const paths = validateProjectFilePaths(
       state.project.filePaths,
       files.map((file) => safeProjectPath(file.webkitRelativePath || file.name)),
@@ -776,7 +801,12 @@ async function exportProject() {
 
 async function deleteCurrentFile() {
   if (!state.project || !state.currentPath) return;
-  if (!window.confirm(`Delete “${state.currentPath}” from ${state.project.name}?`)) return;
+  const confirmed = await confirmAction({
+    title: 'Delete this file?',
+    message: `“${state.currentPath}” will be removed from ${state.project.name} on this device. This cannot be undone.`,
+    confirmLabel: 'Delete file',
+  });
+  if (!confirmed) return;
   const path = state.currentPath;
   await store.removeFile(state.project.id, path);
   state.project.filePaths = state.project.filePaths.filter((entry) => entry !== path);
@@ -793,7 +823,12 @@ async function deleteCurrentFile() {
 }
 
 async function deleteProject(project) {
-  if (!window.confirm(`Delete “${project.name}” and all of its files from this browser? This cannot be undone.`)) return;
+  const confirmed = await confirmAction({
+    title: 'Delete this project?',
+    message: `“${project.name}” and all of its files will be removed from this browser. This cannot be undone.`,
+    confirmLabel: 'Delete project',
+  });
+  if (!confirmed) return;
   if (state.project?.id === project.id) clearTimeout(state.metaTimer);
   if (localStorage.getItem(PENDING_BUILD_KEY) === project.id) localStorage.removeItem(PENDING_BUILD_KEY);
   await store.deleteProject(project.id);
@@ -1091,7 +1126,13 @@ function bindEvents() {
   $('import-zip-button').addEventListener('click', () => $('zip-input').click());
   $('zip-input').addEventListener('change', (event) => { const file = event.target.files?.[0]; if (file) void importZip(file); });
   $('upload-files-button').addEventListener('click', () => $('files-input').click());
-  $('files-input').addEventListener('change', (event) => { if (event.target.files?.length) void importFiles(event.target.files); event.target.value = ''; });
+  $('files-input').addEventListener('change', (event) => {
+    const files = Array.from(event.target.files || []);
+    // Reset the input only after snapshotting the File objects; clearing it
+    // empties the live FileList, which previously made uploads import nothing.
+    event.target.value = '';
+    if (files.length) void importFiles(files);
+  });
   $('project-list').addEventListener('click', (event) => {
     const item = event.target.closest('[data-project-id]');
     if (item) void loadProject(item.dataset.projectId);
