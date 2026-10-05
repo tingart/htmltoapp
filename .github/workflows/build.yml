@@ -108,7 +108,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          # The Tauri Android Gradle project is generated later in this job.
+          # Hash the pinned Tauri CLI version so setup-java can cache Gradle before then.
           cache: gradle
+          cache-dependency-path: package-lock.json
 
       - name: Set up Android SDK and NDK
         if: matrix.platform == 'android'
