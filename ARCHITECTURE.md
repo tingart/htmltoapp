@@ -1,6 +1,6 @@
 # Architecture
 
-Forge is a static project IDE, an optional authenticated upload relay, a GitHub Actions build factory, and one reusable Tauri v2 shell. The factory packages **static web output**; it does not run arbitrary project build scripts inside CI.
+Forge is a static project IDE, a direct GitHub Actions build workflow, an optional authenticated upload relay, and one reusable Tauri v2 shell. Direct builds need no Cloudflare: the dashboard downloads a ZIP for the user to add to the build repository and dispatch manually. The optional relay enables private one-click uploads. The factory packages **static web output**; it does not run arbitrary project build scripts inside CI.
 
 ## System overview
 
@@ -9,21 +9,22 @@ Forge is a static project IDE, an optional authenticated upload relay, a GitHub 
 │ GitHub Pages: dashboard/                                    │
 │ Projects + file tree + editor + ZIP import/export           │
 │ Files are saved to this browser's IndexedDB                 │
-└───────────────────────┬────────────────────────────────────┘
-                        │ ZIP + metadata + short-lived session
-                        ▼
-┌────────────────────────────────────────────────────────────┐
-│ Optional Cloudflare Worker + R2                             │
-│ GitHub App OAuth · write-access check · rate limit           │
-│ temporary ZIP storage · workflow_dispatch · build status     │
-│ GitHub tokens/private key stay server-side                   │
-└───────────────────────┬────────────────────────────────────┘
-                        │ workflow_dispatch(upload_id, metadata)
-                        ▼
+└──────────────┬─────────────────────────────┬───────────────┘
+               │ direct mode                  │ optional relay mode
+               │ download ZIP; user commits   │ ZIP + metadata + short-lived session
+               │ it and runs workflow         ▼
+               │            ┌──────────────────────────────────────────┐
+               │            │ Optional Cloudflare Worker + R2           │
+               │            │ GitHub App OAuth · rate limit · status    │
+               │            │ private temporary ZIP; secrets server-side│
+               │            └─────────────────────┬────────────────────┘
+               │                                  │ workflow_dispatch(upload_id)
+               └─────────────────────┬────────────┘
+                                     ▼
 ┌────────────────────────────────────────────────────────────┐
 │ GitHub Actions: .github/workflows/build.yml                  │
-│ verify runner identity → download ZIP → validate/extract     │
-│ inject API → configure reusable Tauri shell → native build   │
+│ download/read ZIP → validate/extract → inject API → build     │
+│ reusable Tauri shell on native platform runners              │
 └───────────────────────┬────────────────────────────────────┘
                         │ same shared shell + different runner
              ┌──────────┼───────────┬───────────┐
@@ -48,11 +49,11 @@ The browser dashboard still runs as a normal web page. The **downloaded app** is
 - ZIP import understands stored and Deflate entries, checks CRCs, rejects unsafe paths/symlinks/encrypted ZIPs/duplicate case-folded paths, and supports a single wrapper directory.
 - The editor is intentionally local-first: no project source is sent to a server until the user clicks **Build app**. Keep ZIP exports as backups because clearing browser data removes IndexedDB projects.
 
-The Pages bundle is the contents of `dashboard/`. `dashboard/config.js` contains only public defaults. A Worker URL can be entered in the UI or set in that file; neither location may contain a secret.
+The Pages bundle is the contents of `dashboard/`. `dashboard/config.js` contains only public defaults. Direct GitHub Actions is the default path; a Worker URL can optionally be entered in the UI or set in that file. Neither location may contain a secret.
 
 ## 2. Secure upload and build control
 
-A GitHub Pages page cannot safely store a GitHub PAT, GitHub App private key, or a reusable Actions token. The included optional Worker is the small authenticated bridge used for one-click upload:
+A GitHub Pages page cannot safely store a GitHub PAT, GitHub App private key, or a reusable Actions token. In direct mode, **Build app** prepares a ZIP download; the user commits it to the build repository and starts the workflow from GitHub. The source is therefore visible according to that repository's visibility and persists in its history. Use a private build repository or the optional relay for private projects. The included Worker is the authenticated bridge for private one-click upload:
 
 1. GitHub App OAuth redirects through the Worker. The Worker checks that the signed-in GitHub account has write permission to the configured repository.
 2. The Worker exchanges the OAuth code server-side, discards the GitHub user token, and returns a Worker-signed, 30-minute session in the Pages URL fragment. The dashboard keeps that short-lived relay session in `sessionStorage`; it is not a GitHub token.
@@ -61,7 +62,7 @@ A GitHub Pages page cannot safely store a GitHub PAT, GitHub App private key, or
 5. The Actions runner presents its short-lived, read-only `GITHUB_TOKEN` and run ID to the Worker. The Worker checks the run against GitHub's Actions API and streams the matching ZIP to that runner.
 6. The dashboard polls the Worker for status. The Worker uses its App installation token to list run metadata/artifacts and issues short-lived artifact download tickets. Source ZIPs are cleaned after 7 days; Actions artifacts expire after 14 days.
 
-The manual workflow fallback accepts a repository-relative ZIP or a public HTTPS ZIP URL. It is for maintainers and does not bypass workflow/repository permissions.
+Direct/manual workflow dispatch accepts a repository-relative ZIP or a publicly reachable HTTPS ZIP URL. It uses GitHub's normal repository/workflow permissions and does not require the Worker or a browser token.
 
 ### Worker API
 

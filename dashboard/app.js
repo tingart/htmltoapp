@@ -25,6 +25,7 @@ const state = {
   metaTimer: 0,
   collapsedFolders: new Set(),
   build: null,
+  directBuild: null,
   buildPollTimer: 0,
   relayUrl: '',
   sessionToken: '',
@@ -353,7 +354,11 @@ function updateBuildControls() {
   for (const input of document.querySelectorAll('input[name="platform"]')) input.disabled = !hasProject;
   const selected = getSelectedPlatforms();
   $('build-button').disabled = !hasProject || selected.length === 0 || $('build-button').classList.contains('is-busy');
-  $('build-hint').textContent = !hasProject ? 'Choose a project and platform to continue.' : selected.length ? `${selected.length} target${selected.length === 1 ? '' : 's'} selected · your project is saved locally.` : 'Select at least one platform to build.';
+  $('build-hint').textContent = !hasProject
+    ? 'Choose a project and platform to continue.'
+    : selected.length
+      ? `${selected.length} target${selected.length === 1 ? '' : 's'} selected · ${state.relayUrl ? 'optional relay configured' : 'direct GitHub Actions · no Cloudflare needed'}.`
+      : 'Select at least one platform to build.';
 }
 
 function setActiveProjectUI() {
@@ -784,14 +789,17 @@ async function createProjectZip(project = state.project, options = {}) {
   return createZip(entries, options);
 }
 
-function downloadBytes(filename, bytes, mimeType = 'application/octet-stream') {
-  const blob = new Blob([bytes], { type: mimeType || 'application/octet-stream' });
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename.split('/').pop() || 'download.bin';
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function downloadBytes(filename, bytes, mimeType = 'application/octet-stream') {
+  downloadBlob(filename, new Blob([bytes], { type: mimeType || 'application/octet-stream' }));
 }
 
 async function exportProject() {
@@ -859,7 +867,7 @@ async function deleteProject(project) {
 function updateRelayIndicator() {
   const dot = $('relay-status-dot');
   dot.classList.toggle('connected', Boolean(state.relayUrl));
-  dot.title = state.relayUrl ? 'Build relay configured' : 'Build relay not configured';
+  dot.title = state.relayUrl ? 'Optional secure relay configured' : 'Direct GitHub Actions works without a relay';
 }
 
 function loadRelayUrl() {
@@ -999,15 +1007,97 @@ function encodeManifestHeader(value) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
+function sourceZipFilename(appName) {
+  const slug = String(appName || 'my-app')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48) || 'my-app';
+  return `${slug}.zip`;
+}
+
+function actionsWorkflowUrl() {
+  let repository = String(CONFIG.repository || 'tingart/htmltoapp');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) repository = 'tingart/htmltoapp';
+  let workflow = String(CONFIG.workflowPath || '.github/workflows/build.yml').split('/').pop();
+  if (!/^[A-Za-z0-9_.-]+\.ya?ml$/i.test(workflow)) workflow = 'build.yml';
+  return `https://github.com/${repository}/actions/workflows/${encodeURIComponent(workflow)}`;
+}
+
+function renderDirectBuildDialog() {
+  if (!state.directBuild) return;
+  const { filename, metadata, blob } = state.directBuild;
+  const sourcePath = $('direct-source-path').value.trim();
+  $('direct-zip-name').textContent = filename;
+  $('direct-zip-size').textContent = formatBytes(blob.size);
+  $('direct-target-repo').textContent = CONFIG.repository || 'tingart/htmltoapp';
+  $('direct-actions-link').href = actionsWorkflowUrl();
+  $('direct-build-inputs').textContent = [
+    `source_path: ${sourcePath}`,
+    `app_name: ${metadata.appName}`,
+    `package_id: ${metadata.packageId}`,
+    `version: ${metadata.version}`,
+    `platforms: ${metadata.platforms.join(',')}`,
+  ].join('\n');
+}
+
+async function copyToClipboard(value, successMessage) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const helper = document.createElement('textarea');
+      helper.value = value;
+      helper.setAttribute('readonly', '');
+      helper.style.position = 'fixed';
+      helper.style.opacity = '0';
+      document.body.append(helper);
+      helper.select();
+      const copied = document.execCommand('copy');
+      helper.remove();
+      if (!copied) throw new Error('Clipboard access is unavailable.');
+    }
+    showToast(successMessage);
+  } catch {
+    showToast('Could not copy automatically. Select and copy the text manually.', 'error');
+  }
+}
+
+async function startDirectBuild(metadata) {
+  const buildButton = $('build-button');
+  buildButton.classList.add('is-busy');
+  buildButton.disabled = true;
+  $('build-button-label').textContent = 'Packaging ZIP…';
+  try {
+    if (!(await flushEditorSave()) || !(await flushMetaSave())) throw new Error('Save your latest project changes before preparing the build.');
+    const blob = await createProjectZip(state.project);
+    const filename = sourceZipFilename(metadata.appName);
+    state.directBuild = { blob, filename, metadata };
+    $('direct-source-path').value = `projects/${filename}`;
+    renderDirectBuildDialog();
+    downloadBlob(filename, blob);
+    openDialog($('direct-build-dialog'));
+    showToast('Project ZIP downloaded. Follow the steps to run it with GitHub Actions.');
+  } catch (error) {
+    showToast(error.message || 'Could not prepare this build ZIP.', 'error', 6000);
+  } finally {
+    buildButton.classList.remove('is-busy');
+    $('build-button-label').textContent = 'Build app';
+    updateBuildControls();
+  }
+}
+
 async function startBuild({ afterLogin = false } = {}) {
   if (!state.project) return showToast('Create or open a project first.', 'error');
-  if (!state.relayUrl) {
-    openDialog($('relay-dialog'));
-    return;
-  }
   let metadata;
   try { metadata = validateBuildMetadata(); }
   catch (error) { showToast(error.message, 'error'); return; }
+  if (!state.relayUrl) {
+    await startDirectBuild(metadata);
+    return;
+  }
   if (!getSessionToken()) {
     await connectRelayAndReturn();
     return;
@@ -1183,6 +1273,17 @@ function bindEvents() {
   for (const id of ['app-name', 'package-id', 'app-version']) $(id).addEventListener('input', scheduleMetaSave);
   for (const checkbox of document.querySelectorAll('input[name="platform"]')) checkbox.addEventListener('change', updateBuildControls);
   $('build-button').addEventListener('click', () => void startBuild());
+  $('direct-source-path').addEventListener('input', renderDirectBuildDialog);
+  $('download-direct-zip-button').addEventListener('click', () => {
+    if (state.directBuild) downloadBlob(state.directBuild.filename, state.directBuild.blob);
+  });
+  $('copy-direct-source-path-button').addEventListener('click', () => {
+    void copyToClipboard($('direct-source-path').value.trim(), 'Repository path copied.');
+  });
+  $('copy-direct-inputs-button').addEventListener('click', () => {
+    renderDirectBuildDialog();
+    void copyToClipboard($('direct-build-inputs').textContent, 'GitHub Actions inputs copied.');
+  });
   $('mobile-menu-button').addEventListener('click', () => {
     setMobileSidebar(!$('project-sidebar').classList.contains('mobile-open'));
   });
@@ -1210,8 +1311,11 @@ function bindEvents() {
       if (state.relayUrl) localStorage.setItem(RELAY_URL_KEY, state.relayUrl);
       else localStorage.removeItem(RELAY_URL_KEY);
       updateRelayIndicator();
+      updateBuildControls();
       closeDialog($('relay-dialog'));
-      if (state.relayUrl) showToast('Build relay saved. Sign in with GitHub when you start the next build.');
+      showToast(state.relayUrl
+        ? 'Optional secure relay saved. Sign in with GitHub when you start a build.'
+        : 'Direct GitHub Actions is ready. No relay is required.');
     } catch (error) { showToast(error.message, 'error'); }
   });
   $('disconnect-relay-button').addEventListener('click', () => {
@@ -1221,8 +1325,9 @@ function bindEvents() {
     localStorage.removeItem(RELAY_URL_KEY);
     localStorage.removeItem(PENDING_BUILD_KEY);
     updateRelayIndicator();
+    updateBuildControls();
     closeDialog($('relay-dialog'));
-    showToast('Build relay disconnected.');
+    showToast('Direct GitHub Actions enabled. No relay is required.');
   });
   $('project-form').addEventListener('submit', (event) => {
     event.preventDefault();

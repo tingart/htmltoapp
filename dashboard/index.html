@@ -80,7 +80,7 @@
           </button>
           <button class="sidebar-action" id="relay-settings-button" type="button">
             <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="m16.3 11.9 1 1.7-1.7 1.7-1.7-1-1.4.6-.5 1.9H8l-.5-1.9-1.4-.6-1.7 1-1.7-1.7 1-1.7-.6-1.4-1.9-.5V7.6l1.9-.5.6-1.4-1-1.7L4.4 2.3l1.7 1 1.4-.6L8 0.8h4l.5 1.9 1.4.6 1.7-1 1.7 1.7-1 1.7.6 1.4 1.9.5v2.4l-1.9.5-.6 1.4Z" transform="translate(0 1) scale(.86)"/></svg>
-            <span>Build connection</span>
+            <span>Optional relay</span>
             <span id="relay-status-dot" class="relay-status-dot"></span>
           </button>
           <div class="sidebar-footer"><span>TAURI V2 BUILD FACTORY</span><span>v1.0</span></div>
@@ -171,7 +171,7 @@
         <button id="build-button" class="button button-build" type="button" disabled><span class="build-button-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m11.5 2.5-7 8h5.2l-.5 6 7.3-8.7h-5.3l.3-5.3Z"/></svg></span><span id="build-button-label">Build app</span><span class="build-button-arrow">↗</span></button>
         <div class="build-hint" id="build-hint">Choose a project and platform to continue.</div>
         <div id="active-build-card" class="active-build-card" hidden></div>
-        <div class="build-security"><span class="security-lock"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.1" y="7" width="9.8" height="7" rx="1.5"/><path d="M5.2 7V5.2a2.8 2.8 0 1 1 5.6 0V7"/></svg></span><span><strong>Private by design</strong><small>Source uploads directly to your private build relay. No token in this site.</small></span></div>
+        <div class="build-security"><span class="security-lock"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.1" y="7" width="9.8" height="7" rx="1.5"/><path d="M5.2 7V5.2a2.8 2.8 0 1 1 5.6 0V7"/></svg></span><span><strong>Direct GitHub Actions · no Cloudflare needed</strong><small>By default, Build app downloads a ZIP and guides you through Actions. An optional relay automates private uploads.</small></span></div>
       </aside>
     </main>
 
@@ -213,12 +213,31 @@
 
   <dialog class="modal" id="relay-dialog">
     <form method="dialog" class="modal-card modal-card-wide" id="relay-form">
-      <div class="modal-topline"><span class="modal-kicker">SECURE BUILD CONNECTION</span><button class="modal-close" value="cancel" formnovalidate aria-label="Close">×</button></div>
-      <div class="modal-title-row"><div class="modal-symbol modal-symbol-green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 15.5 6 18a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m5.5-.5 2.5-2.5a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0M8 12l8 0" transform="translate(1 0)"/></svg></div><div><h2>Connect your build relay</h2><p>The static site never gets a GitHub token. A small Cloudflare Worker securely uploads your ZIP and starts Actions.</p></div></div>
-      <label class="field-label" for="relay-url-input">YOUR CLOUDFLARE WORKER URL</label><input id="relay-url-input" class="text-input modal-input mono-input" type="url" placeholder="https://htmltoapp-build-relay.your-name.workers.dev" autocomplete="url">
-      <div class="relay-explainer"><div class="relay-step"><span>01</span><p>Deploy <code>worker/</code> and connect a GitHub App once.</p></div><div class="relay-step"><span>02</span><p>Sign in with GitHub — the OAuth token stays server-side.</p></div><div class="relay-step"><span>03</span><p>Upload the ZIP to temporary R2 storage; Actions builds it.</p></div></div>
-      <div class="relay-warning"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5 16 15H2L9 2.5Z"/><path d="M9 6.5v4m0 2h.01"/></svg><span>Setup is required once by the repository owner. See the <a href="https://github.com/tingart/htmltoapp/blob/main/docs/SETUP.md" target="_blank" rel="noreferrer">deployment guide</a>. Never paste a PAT or private key here.</span></div>
-      <div class="modal-actions modal-actions-split"><button class="text-danger-button" id="disconnect-relay-button" type="button">Disconnect</button><div><button class="button button-secondary" value="cancel" formnovalidate>Cancel</button><button class="button button-primary" id="save-relay-button" type="submit">Save connection</button></div></div>
+      <div class="modal-topline"><span class="modal-kicker">OPTIONAL ONE-CLICK RELAY</span><button class="modal-close" value="cancel" formnovalidate aria-label="Close">×</button></div>
+      <div class="modal-title-row"><div class="modal-symbol modal-symbol-green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 15.5 6 18a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m5.5-.5 2.5-2.5a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0M8 12l8 0" transform="translate(1 0)"/></svg></div><div><h2>Optional private build relay</h2><p>You can already build directly with GitHub Actions without Cloudflare. Add a relay only if you want private one-click ZIP uploads and automatic status updates.</p></div></div>
+      <label class="field-label" for="relay-url-input">CLOUDFLARE WORKER URL (OPTIONAL)</label><input id="relay-url-input" class="text-input modal-input mono-input" type="url" placeholder="https://htmltoapp-build-relay.your-name.workers.dev" autocomplete="url">
+      <div class="relay-explainer"><div class="relay-step"><span>01</span><p>Deploy <code>worker/</code> and connect a GitHub App once.</p></div><div class="relay-step"><span>02</span><p>Sign in with GitHub — the OAuth token stays server-side.</p></div><div class="relay-step"><span>03</span><p>The relay privately uploads the ZIP and dispatches Actions.</p></div></div>
+      <div class="relay-warning"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5 16 15H2L9 2.5Z"/><path d="M9 6.5v4m0 2h.01"/></svg><span>This is optional setup. Leave the URL blank to use direct GitHub Actions. Never paste a PAT or private key here; see the <a href="https://github.com/tingart/htmltoapp/blob/main/docs/SETUP.md" target="_blank" rel="noreferrer">setup guide</a> only if you want the relay.</span></div>
+      <div class="modal-actions modal-actions-split"><button class="text-danger-button" id="disconnect-relay-button" type="button">Use direct Actions</button><div><button class="button button-secondary" value="cancel" formnovalidate>Close</button><button class="button button-primary" id="save-relay-button" type="submit">Save relay</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="direct-build-dialog">
+    <form method="dialog" class="modal-card modal-card-wide" id="direct-build-form">
+      <div class="modal-topline"><span class="modal-kicker">DIRECT GITHUB ACTIONS · NO CLOUDFLARE</span><button class="modal-close" value="cancel" formnovalidate aria-label="Close">×</button></div>
+      <div class="modal-title-row"><div class="modal-symbol modal-symbol-green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8m-8 4h8m-8 4h5m-9-9h14v16H4V4Z"/><path d="m14 17 2 2 4-5"/></svg></div><div><h2>Your ZIP is ready</h2><p>GitHub Actions will build it directly. No Cloudflare account, GitHub token, or relay setup is needed.</p></div></div>
+      <div class="direct-zip-row"><span><strong id="direct-zip-name">project.zip</strong><small id="direct-zip-size">0 B</small></span><button class="button button-secondary" id="download-direct-zip-button" type="button">Download again</button></div>
+      <div class="relay-explainer direct-steps">
+        <div class="relay-step"><span>01</span><p>With write access, upload the downloaded ZIP into <code id="direct-target-repo">tingart/htmltoapp</code> and commit it to the branch where you will run the workflow.</p></div>
+        <div class="relay-step"><span>02</span><p>Set the <code>source_path</code> below to the ZIP's repository path. The suggested <code>projects/</code> folder is ready in this repository.</p></div>
+        <div class="relay-step"><span>03</span><p>Open <b>Build native app → Run workflow</b>, enter each value below in its matching field, then click <b>Run workflow</b>.</p></div>
+      </div>
+      <label class="field-label" for="direct-source-path">REPOSITORY PATH TO THE ZIP</label>
+      <div class="direct-path-row"><input id="direct-source-path" class="text-input mono-input" maxlength="240" value="projects/project.zip" autocomplete="off"><button class="button button-secondary" id="copy-direct-source-path-button" type="button">Copy path</button></div>
+      <p class="field-label direct-inputs-label">WORKFLOW INPUTS TO COPY</p>
+      <pre id="direct-build-inputs" class="direct-inputs"></pre>
+      <div class="relay-warning direct-privacy-warning"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5 16 15H2L9 2.5Z"/><path d="M9 6.5v4m0 2h.01"/></svg><span>Access &amp; privacy: you need write access to the target repository. If it is public, committing this ZIP makes your source public and it stays in Git history. Use your own private build repository for private code; a public <code>source_url</code> is public too.</span></div>
+      <div class="modal-actions direct-build-actions"><button class="button button-secondary" id="copy-direct-inputs-button" type="button">Copy workflow inputs</button><a class="button button-primary" id="direct-actions-link" href="https://github.com/tingart/htmltoapp/actions/workflows/build.yml" target="_blank" rel="noreferrer">Open GitHub Actions <span>↗</span></a></div>
     </form>
   </dialog>
 
@@ -226,7 +245,7 @@
     <form method="dialog" class="modal-card modal-card-wide">
       <div class="modal-topline"><span class="modal-kicker">QUICK START</span><button class="modal-close" value="cancel" aria-label="Close">×</button></div>
       <div class="modal-title-row"><div class="modal-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 8-4 4 4 4m6-8 4 4-4 4m-2-11-2 14"/></svg></div><div><h2>From idea to install</h2><p>Your code stays local until you explicitly start a build.</p></div></div>
-      <div class="guide-list"><div><span>1</span><section><strong>Create or import</strong><p>Start with a tiny HTML app, upload files, or extract a project ZIP into the workspace.</p></section></div><div><span>2</span><section><strong>Edit and export</strong><p>Files auto-save in this browser. Export a ZIP any time to keep a copy of your project.</p></section></div><div><span>3</span><section><strong>Build with Actions</strong><p>Connect the optional Cloudflare relay, choose targets, then watch the GitHub Actions run and download its artifacts.</p></section></div></div>
+      <div class="guide-list"><div><span>1</span><section><strong>Create or import</strong><p>Start with a tiny HTML app, upload files, or extract a project ZIP into the workspace.</p></section></div><div><span>2</span><section><strong>Edit and export</strong><p>Files auto-save in this browser. Export a ZIP any time to keep a copy of your project.</p></section></div><div><span>3</span><section><strong>Build with Actions</strong><p>Choose targets and click Build app to download a ZIP. Upload it to GitHub, then start the native build workflow directly—no Cloudflare needed.</p></section></div></div>
       <div class="native-note"><span class="native-note-mark">T</span><span><strong>About “native”</strong><small>Tauri apps render with the OS WebView, plus a Rust backend and explicit native permissions. They are not browser tabs — but they also do not get unrestricted access to the host OS.</small></span></div>
       <div class="modal-actions"><a class="button button-secondary" href="https://github.com/tingart/htmltoapp/blob/main/docs/SETUP.md" target="_blank" rel="noreferrer">Full setup guide ↗</a><button class="button button-primary" value="close">Got it</button></div>
     </form>

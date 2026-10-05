@@ -1,15 +1,15 @@
 # Security model and limitations
 
-Forge accepts user-controlled HTML/JavaScript and ZIP files, publishes a static dashboard, optionally uploads projects to a Worker, and packages apps in GitHub Actions. Treat project content and build metadata as untrusted.
+Forge accepts user-controlled HTML/JavaScript and ZIP files, publishes a static dashboard, and packages apps in GitHub Actions. The default direct path downloads a ZIP for the user to commit and run; an optional Worker enables private one-click uploads. Treat project content and build metadata as untrusted.
 
 ## Trust boundaries
 
 ```text
 Browser / GitHub Pages
-  - public static code only
-  - local projects in IndexedDB
-  - short-lived relay session, no GitHub PAT/App key
-        │ HTTPS + exact-origin CORS
+  - public static code only; local projects in IndexedDB
+  - no GitHub PAT/App key in direct or relay mode
+  - direct mode downloads ZIP; user chooses where to commit it
+        │ optional HTTPS + exact-origin CORS
         ▼
 Cloudflare Worker / R2
   - GitHub App private key + OAuth client secret in Worker secrets
@@ -31,13 +31,14 @@ Installed Tauri app
 ## GitHub credentials and upload flow
 
 - Never add a PAT, OAuth client secret, GitHub App private key, Android keystore, or signing password to the dashboard, `config.js`, a project ZIP, a commit, or a Pages artifact.
+- Direct mode does not push files or dispatch workflows from the browser: it only downloads a ZIP. The user uploads/commits the ZIP and starts Actions on GitHub. A `source_path` ZIP inherits the repository's visibility and remains in Git history; a `source_url` must be public to the runner. Never put private source in a public repository.
 - GitHub App credentials live only as Cloudflare Worker secrets. The Worker mints a repository-scoped installation token server-side and asks GitHub to dispatch the build workflow.
 - The Worker completes OAuth code exchange server-side, checks the account's write permission on the configured repository, discards the user access token, and returns a short-lived HMAC-signed Worker session (30 minutes). The dashboard keeps it in `sessionStorage`, not as a GitHub credential.
 - The R2 object uses a random UUID and remains private. The Actions runner presents its run-scoped `GITHUB_TOKEN` and run ID; the Worker verifies the run via the GitHub API, including repository, workflow path, event, branch and display title, before returning source bytes.
 - GitHub App permission is limited to **Actions: read/write** for the installed repository. The build job's `GITHUB_TOKEN` is limited to `contents: read` and `actions: read`. Do not add release publishing, package-write, or other permissions unless a separate reviewed feature needs them.
 - CORS is exact-origin, never `*`. It prevents unrelated browser origins from reading responses but is not authentication. Build submission additionally requires a signed session for a repository writer and a rate-limit binding.
 - Artifact download tickets are short-lived and scoped to one run/artifact. GitHub Actions artifacts are available to people with access to the repository; links expire with the ticket/artifact.
-- Source ZIPs stay out of Git history and are cleaned from R2 after 7 days. Build artifacts expire after 14 days.
+- In relay mode, source ZIPs stay out of Git history and are cleaned from R2 after 7 days. Direct-mode ZIPs are committed to the selected repository by the user and follow that repository's retention/visibility rules. Build artifacts expire after 14 days.
 
 ## Untrusted archive and build handling
 
