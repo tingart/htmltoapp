@@ -290,6 +290,19 @@ button:disabled { opacity: .5; cursor: not-allowed !important; }
 .relay-warning { display: flex; align-items: flex-start; gap: 8px; padding: 10px; margin-top: 13px; border: 1px solid rgba(244,189,112,.14); border-radius: 7px; background: rgba(244,189,112,.035); color: #b49b78; font-size: 8px; line-height: 1.55; }
 .relay-warning svg { flex: 0 0 15px; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; }
 .relay-warning a { color: #e2bd80; text-decoration: underline; text-underline-offset: 2px; }
+.direct-zip-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; margin: -5px 0 2px; border: 1px solid rgba(199,243,110,.14); border-radius: 8px; background: rgba(199,243,110,.035); }
+.direct-zip-row > span { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.direct-zip-row strong { overflow: hidden; color: #d9e7d3; font-family: var(--mono); font-size: 9px; text-overflow: ellipsis; }
+.direct-zip-row small { color: #829181; font-size: 8px; }
+.direct-zip-row .button, .direct-path-row .button { min-height: 31px; padding: 0 9px; font-size: 8px; }
+.direct-steps { margin-top: 10px; }
+.direct-path-row { display: flex; align-items: center; gap: 7px; }
+.direct-path-row .text-input { min-width: 0; flex: 1; height: 35px; font-size: 10px; }
+.direct-inputs-label { margin-top: 12px; }
+.direct-inputs { margin: 0; padding: 9px 10px; overflow-wrap: anywhere; border: 1px solid rgba(255,255,255,.06); border-radius: 7px; background: #101814; color: #b8cf9a; font-family: var(--mono); font-size: 8px; line-height: 1.6; white-space: pre-wrap; }
+.direct-privacy-warning { margin-top: 10px; }
+.direct-build-actions { justify-content: space-between; flex-wrap: wrap; }
+.direct-build-actions .button { min-height: 34px; font-size: 9px; }
 .modal-actions-split { justify-content: space-between; align-items: center; }
 .modal-actions-split > div { display: flex; gap: 8px; }
 .text-danger-button { padding: 6px 0; border: 0; background: transparent; color: #cb7c73; font-size: 9px; cursor: pointer; }

@@ -1,6 +1,6 @@
-# First-time setup
+# Build setup
 
-This guide sets up GitHub Pages for the static IDE, then optionally enables one-click, private ZIP uploads through a Cloudflare Worker + R2. The relay is optional; maintainers can always run the workflow manually with a ZIP path or public HTTPS URL.
+The dashboard can run the GitHub Actions build workflow directly without Cloudflare: it prepares a ZIP for you, then you upload it to the build repository and manually start the workflow. An optional Cloudflare Worker + R2 relay adds private one-click uploads and automatic status updates, but it is not required.
 
 ## 1. Enable Pages and Actions
 
@@ -11,7 +11,18 @@ This guide sets up GitHub Pages for the static IDE, then optionally enables one-
 
 The dashboard URL for this repository is `https://tingart.github.io/htmltoapp/`. The Pages **origin** is `https://tingart.github.io` (without the repository path).
 
-## 2. Create a GitHub App for the relay
+## 2. Build directly with Actions (no Cloudflare)
+
+1. In the dashboard, create/import your project, choose the app metadata and target platforms, and click **Build app**. The dashboard downloads a ZIP and shows the workflow inputs.
+2. In the GitHub repository that contains `.github/workflows/build.yml`, upload the ZIP (the suggested folder is `projects/`) and commit it to the branch you will select for the run. The path in the dashboard must match the uploaded file, for example `projects/my-app.zip`.
+3. Click **Open GitHub Actions** in the dashboard, choose **Build native app → Run workflow**, and enter each displayed value into its matching input field (including the committed `source_path`). Start the run.
+4. Download the platform artifacts from the completed Actions run.
+
+Alternatively, provide `source_url` for a ZIP at a publicly reachable HTTPS URL. Do not put credentials in the URL. A public URL is readable by anyone who can access it.
+
+**Access and source privacy:** you need write access to the build repository. This repository is public, so a ZIP committed here is public and remains in Git history after deletion. Do not upload private project source here. For private projects, use the optional relay below, or run this factory in a private build repository and set `repository`/`workflowPath` in `dashboard/config.js` to that repository's workflow. The dashboard itself never asks for or stores a GitHub token.
+
+## 3. Create a GitHub App for the optional relay
 
 The Pages site must never receive a PAT or GitHub App private key. The optional Worker owns the GitHub App secret and dispatch token.
 
@@ -24,7 +35,7 @@ The Pages site must never receive a PAT or GitHub App private key. The optional 
 
 The Worker requests a single-repository installation token. The token is used only to dispatch the configured workflow and inspect its run/artifact metadata; it never goes to the dashboard or build runner.
 
-## 3. Deploy the Cloudflare Worker and R2 bucket
+## 4. Deploy the optional Cloudflare Worker and R2 bucket
 
 Install Wrangler 4.36 or newer, authenticate, and create the R2 bucket named in `worker/wrangler.toml`:
 
@@ -68,20 +79,14 @@ Keep both key files outside the repo and remove local copies when finished. The 
 
 The Worker has a scheduled hourly cleanup: temporary source ZIPs older than 7 days are deleted. GitHub Actions artifacts are retained for 14 days.
 
-## 4. Connect Pages to the Worker
+## 5. Connect Pages to the optional relay
 
 1. Set the repository Actions **variable** `UPLOAD_RELAY_URL` to the Worker origin, for example `https://htmltoapp-build-relay.your-account.workers.dev`. This is a URL, not a secret; the native build workflow uses it to download the matching ZIP.
-2. In the dashboard, select **Build connection**, enter the same HTTPS URL, and save it. The value is kept in this browser's local storage. Alternatively, a maintainer can set the public `relayUrl` in `dashboard/config.js` before deploying Pages.
+2. In the dashboard, select **Optional relay**, enter the same HTTPS URL, and save it. The value is kept in this browser's local storage. Alternatively, a maintainer can set the public `relayUrl` in `dashboard/config.js` before deploying Pages.
 3. Click **Build app**. Sign in with GitHub. The OAuth token is exchanged and checked on the Worker; the page only receives a signed, 30-minute relay session in the URL fragment. The session is stored in tab-scoped `sessionStorage` and is not a GitHub token.
 4. Choose one or more targets and submit. A successful run shows the GitHub Actions link and artifact download buttons.
 
 If you preview the dashboard on another origin, add that exact origin to `ALLOWED_ORIGINS` and redeploy the Worker. Do not use `*` or a broad origin wildcard. CORS is an additional browser boundary, not a replacement for GitHub sign-in or rate limiting.
-
-## 5. Manual build without the relay
-
-For a one-off build, put the ZIP in the repository (for example `projects/my-webos.zip`) or host it at a public HTTPS URL. Open **Actions → Build native app → Run workflow** and provide exactly one of `source_path` or `source_url`. Select the metadata and platforms.
-
-A public URL is recorded in workflow inputs and should not contain private credentials. For large/private uploads, use the Worker flow instead. The dashboard cannot securely upload a project ZIP to GitHub or trigger Actions by itself: a static page has no privileged GitHub credential.
 
 ## 6. Android signing (optional)
 
@@ -109,7 +114,8 @@ Common issues:
 
 - **Relay CORS error:** check `ALLOWED_ORIGINS` against the browser origin exactly, including scheme and port. Redeploy the Worker after editing it.
 - **GitHub sign-in returns to Pages with an error:** check App OAuth callback URL, App installation on this repository, and that the signed-in account has write permission.
-- **Workflow dispatch fails:** check App installation ID, Actions: Read and write, default branch, workflow file on that branch, and `UPLOAD_RELAY_URL`.
+- **Direct source path not found:** make sure the ZIP is committed to the selected branch and `source_path` matches its repository path exactly.
+- **Relay dispatch fails:** check App installation ID, Actions: Read and write, default branch, workflow file on that branch, and `UPLOAD_RELAY_URL`.
 - **Source download is rejected:** the Worker checks the Actions run ID, workflow path, default branch, `workflow_dispatch` event and opaque upload ID. Do not edit/rename the workflow without updating `WORKFLOW_PATH`/`WORKFLOW_ID`.
 - **ZIP rejected:** include root `index.html`; avoid symlinks, encrypted archives, duplicate case-only paths, traversal paths, or a very high-compression archive.
 - **Android unsigned:** configure all Android secrets. Keep the same keystore for later updates.

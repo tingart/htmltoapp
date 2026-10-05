@@ -49,8 +49,9 @@ worker/.dry-run/
 worker/.dev.vars
 .dev.vars
 
-# Temporary ZIPs and signing keys
+# Temporary ZIPs and signing keys; allow explicit direct-Actions source ZIPs
 *.zip
+!projects/*.zip
 *.jks
 *.keystore
 *.pem
