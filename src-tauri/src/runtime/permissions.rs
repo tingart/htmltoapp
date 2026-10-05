@@ -48,7 +48,10 @@ pub async fn permissions_request(
             .message(message)
             .title(title)
             .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom("Allow", "Deny"))
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Allow".to_string(),
+                "Deny".to_string(),
+            ))
             .blocking_show()
     })
     .await
